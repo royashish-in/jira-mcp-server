@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  jira-mcp-server:
+    build: .
+    container_name: jira-mcp-server
+    restart: unless-stopped
+    environment:
+      - JIRA_URL=${JIRA_URL}
+      - JIRA_USERNAME=${JIRA_USERNAME}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - VERBOSE_LOGGING=${VERBOSE_LOGGING:-false}
+    # Uncomment to expose port for HTTP access (optional)
+    # ports:
+    #   - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
