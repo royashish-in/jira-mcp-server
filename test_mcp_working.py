@@ -94,7 +94,7 @@ async def test_mcp_step_by_step():
     
     print("Testing MCP protocol step by step...")
     print(f"Using JIRA instance: {env.get('JIRA_URL')}")
-    print(f"Using username: {env.get('JIRA_USERNAME')}")
+    print(f"Using username: [REDACTED]@[DOMAIN].com")
     print()
     
     # Start the MCP server as a subprocess

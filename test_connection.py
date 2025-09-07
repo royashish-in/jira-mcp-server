@@ -42,7 +42,7 @@ async def test_connection():
                 try:
                     user_info = response.json()
                     print(f"✅ Connected to JIRA as: {user_info.get('displayName', 'Unknown')}")
-                    print(f"   Email: {user_info.get('emailAddress', 'Unknown')}")
+                    print(f"   Email: [REDACTED]@[DOMAIN].com")
                     return True
                 except ValueError:
                     print("❌ Invalid JSON response from JIRA")

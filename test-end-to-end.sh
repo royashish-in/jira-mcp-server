@@ -72,21 +72,10 @@ echo "🔗 Testing JIRA connection..."
 # --env-file: Load environment variables from .env file
 docker run --rm --env-file .env jira-mcp-server:test python test_connection.py
 
-# Step 4: Test MCP Protocol - Tools List
-# Send a JSON-RPC request to list available MCP tools
-# This tests the MCP server's ability to respond to protocol requests
-echo "🛠️ Testing MCP tools..."
-# Echo JSON-RPC request and pipe it to the container's stdin
-# The server should respond with a list of available tools (get_user_stories, get_issue)
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | docker run --rm -i --env-file .env jira-mcp-server:test
-
-# Step 5: Test MCP Protocol - Tool Execution
-# Call the get_user_stories tool to verify it can fetch real JIRA data
-# This tests the complete integration: MCP protocol + JIRA API
-echo "📋 Testing get_user_stories..."
-# Send a tools/call request with specific parameters
-# limit:3 ensures we get a small, manageable response for testing
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_user_stories","arguments":{"limit":3}}}' | docker run --rm -i --env-file .env jira-mcp-server:test
+# Step 4: Test MCP Protocol
+# Use the comprehensive MCP test that handles proper initialization
+echo "🛠️ Testing MCP protocol..."
+docker run --rm --env-file .env jira-mcp-server:test python test_mcp_working.py
 
 # Step 6: Tag Image for Docker Hub
 # Load environment variables from .env file to get DOCKER_USER

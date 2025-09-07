@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir uv
 
 # Copy all files needed for installation
 COPY pyproject.toml README.md ./
-COPY server.py test_connection.py ./
+COPY server.py test_connection.py test_mcp_working.py ./
 
 # Install dependencies with pip
 RUN pip install --no-cache-dir .
