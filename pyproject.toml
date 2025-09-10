@@ -1,5 +1,5 @@
 [project]
-name = "jira-mcp-server"
+name = "jira-mcp-standalone"
 version = "1.0.0"
 description = "JIRA MCP Server for AI integration - fetch user stories and issues"
 authors = [

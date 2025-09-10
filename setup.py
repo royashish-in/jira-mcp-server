@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="jira-mcp-server",
+    name="jira-mcp-standalone",
     version="1.0.0",
     author="Ashish Roy",
     author_email="royashish@example.com",
