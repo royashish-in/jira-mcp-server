@@ -123,7 +123,7 @@ async def test_all_tools():
         tool_names = [tool["name"] for tool in tools]
         print(f"Available tools: {tool_names}")
         
-        expected_tools = ["get_user_stories", "get_issue", "get_projects", "search_issues"]
+        expected_tools = ["get_user_stories", "get_issue", "get_projects", "search_issues", "get_project_stats", "get_recent_issues", "get_issues_by_assignee"]
         for expected_tool in expected_tools:
             if expected_tool not in tool_names:
                 print(f"Missing expected tool: {expected_tool}")
