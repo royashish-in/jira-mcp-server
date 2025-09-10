@@ -356,6 +356,86 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["sprint_id", "keys"]
             }
+        ),
+        Tool(
+            name="get_boards",
+            description="Get available agile boards",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="get_sprint_issues",
+            description="Get issues in specific sprint",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sprint_id": {"type": "string", "description": "Sprint ID"}
+                },
+                "required": ["sprint_id"]
+            }
+        ),
+        Tool(
+            name="link_issues",
+            description="Create link between issues",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "inward_key": {"type": "string", "description": "Source issue key"},
+                    "outward_key": {"type": "string", "description": "Target issue key"},
+                    "link_type": {"type": "string", "description": "Link type (Blocks, Relates, etc.)"}
+                },
+                "required": ["inward_key", "outward_key", "link_type"]
+            }
+        ),
+        Tool(
+            name="get_subtasks",
+            description="Get subtasks of an issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Parent issue key"}
+                },
+                "required": ["key"]
+            }
+        ),
+        Tool(
+            name="add_worklog",
+            description="Add time log to issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Issue key"},
+                    "time_spent": {"type": "string", "description": "Time spent (e.g., '2h', '30m')"},
+                    "comment": {"type": "string", "description": "Work description"}
+                },
+                "required": ["key", "time_spent"]
+            }
+        ),
+        Tool(
+            name="get_users",
+            description="Get assignable users for project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project key"}
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="create_subtask",
+            description="Create subtask under parent issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "parent_key": {"type": "string", "description": "Parent issue key"},
+                    "summary": {"type": "string", "description": "Subtask summary"},
+                    "description": {"type": "string", "description": "Subtask description"}
+                },
+                "required": ["parent_key", "summary"]
+            }
         )
     ]
 
@@ -414,6 +494,20 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return await get_sprints(arguments)
         elif name == "add_to_sprint":
             return await add_to_sprint(arguments)
+        elif name == "get_boards":
+            return await get_boards(arguments)
+        elif name == "get_sprint_issues":
+            return await get_sprint_issues(arguments)
+        elif name == "link_issues":
+            return await link_issues(arguments)
+        elif name == "get_subtasks":
+            return await get_subtasks(arguments)
+        elif name == "add_worklog":
+            return await add_worklog(arguments)
+        elif name == "get_users":
+            return await get_users(arguments)
+        elif name == "create_subtask":
+            return await create_subtask(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:
@@ -1872,6 +1966,357 @@ async def add_to_sprint(args: Dict[str, Any]) -> List[TextContent]:
             return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
         except Exception as e:
             logger.error(f"Unexpected error in add_to_sprint: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_boards(args: Dict[str, Any]) -> List[TextContent]:
+    """Get available agile boards."""
+    logger.info("Getting agile boards")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/agile/1.0/board",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                boards = data.get("values", [])
+                
+                result = {
+                    "boards": [
+                        {
+                            "id": board.get("id"),
+                            "name": board.get("name"),
+                            "type": board.get("type"),
+                            "location": board.get("location", {}).get("name")
+                        } for board in boards
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_boards: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_sprint_issues(args: Dict[str, Any]) -> List[TextContent]:
+    """Get issues in specific sprint."""
+    sprint_id = args.get("sprint_id")
+    
+    if not sprint_id:
+        return [TextContent(type="text", text="Error: Missing required parameter 'sprint_id'")]
+    
+    logger.info(f"Getting issues for sprint: {sanitize_for_log(sprint_id)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/agile/1.0/sprint/{sprint_id}/issue",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                issues = data.get("issues", [])
+                
+                result = {
+                    "sprintId": sprint_id,
+                    "issueCount": len(issues),
+                    "issues": [
+                        {
+                            "key": issue.get("key"),
+                            "summary": issue.get("fields", {}).get("summary"),
+                            "status": issue.get("fields", {}).get("status", {}).get("name"),
+                            "assignee": issue.get("fields", {}).get("assignee", {}).get("displayName") if issue.get("fields", {}).get("assignee") else "Unassigned"
+                        } for issue in issues
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_sprint_issues: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def link_issues(args: Dict[str, Any]) -> List[TextContent]:
+    """Create link between issues."""
+    inward_key = args.get("inward_key")
+    outward_key = args.get("outward_key")
+    link_type = args.get("link_type")
+    
+    if not inward_key or not outward_key or not link_type:
+        return [TextContent(type="text", text="Error: Missing required parameters")]
+    
+    if not validate_issue_key(inward_key) or not validate_issue_key(outward_key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    logger.info(f"Linking issues {sanitize_for_log(inward_key)} -> {sanitize_for_log(outward_key)}")
+    
+    link_data = {
+        "type": {"name": link_type},
+        "inwardIssue": {"key": inward_key},
+        "outwardIssue": {"key": outward_key}
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                f"{JIRA_URL}/rest/api/3/issueLink",
+                json=link_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 201:
+                result = f"✅ Linked issues: {inward_key} {link_type} {outward_key}\n"
+                result += f"Link type: {link_type}\n"
+                result += f"View: {JIRA_URL}/browse/{inward_key}"
+                
+                logger.info(f"Linked JIRA issues: {inward_key} -> {outward_key}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in link_issues: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_subtasks(args: Dict[str, Any]) -> List[TextContent]:
+    """Get subtasks of an issue."""
+    key = args.get("key")
+    
+    if not key:
+        return [TextContent(type="text", text="Error: Missing required parameter 'key'")]
+    
+    if not validate_issue_key(key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    logger.info(f"Getting subtasks for issue: {sanitize_for_log(key)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/issue/{key}?fields=subtasks",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                subtasks = data.get("fields", {}).get("subtasks", [])
+                
+                result = {
+                    "parentIssue": key,
+                    "subtaskCount": len(subtasks),
+                    "subtasks": [
+                        {
+                            "key": subtask.get("key"),
+                            "summary": subtask.get("fields", {}).get("summary"),
+                            "status": subtask.get("fields", {}).get("status", {}).get("name"),
+                            "assignee": subtask.get("fields", {}).get("assignee", {}).get("displayName") if subtask.get("fields", {}).get("assignee") else "Unassigned"
+                        } for subtask in subtasks
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_subtasks: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def add_worklog(args: Dict[str, Any]) -> List[TextContent]:
+    """Add time log to issue."""
+    key = args.get("key")
+    time_spent = args.get("time_spent")
+    comment = args.get("comment", "")
+    
+    if not key or not time_spent:
+        return [TextContent(type="text", text="Error: Missing required parameters 'key' and 'time_spent'")]
+    
+    if not validate_issue_key(key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    logger.info(f"Adding worklog to issue: {sanitize_for_log(key)}")
+    
+    worklog_data = {
+        "timeSpent": time_spent,
+        "comment": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": comment
+                        }
+                    ]
+                }
+            ]
+        } if comment else None
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                f"{JIRA_URL}/rest/api/3/issue/{key}/worklog",
+                json=worklog_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 201:
+                worklog = response.json()
+                result = f"✅ Added worklog to issue {key}\n"
+                result += f"Time spent: {worklog.get('timeSpent')}\n"
+                result += f"Author: {worklog.get('author', {}).get('displayName')}\n"
+                result += f"URL: {JIRA_URL}/browse/{key}"
+                
+                logger.info(f"Added worklog to JIRA issue: {key}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in add_worklog: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_users(args: Dict[str, Any]) -> List[TextContent]:
+    """Get assignable users for project."""
+    project = args.get("project")
+    
+    if not project:
+        return [TextContent(type="text", text="Error: Missing required parameter 'project'")]
+    
+    if not validate_project_key(project):
+        return [TextContent(type="text", text="Error: Invalid project key format")]
+    
+    logger.info(f"Getting users for project: {sanitize_for_log(project)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/user/assignable/search?project={project}",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                users = response.json()
+                
+                result = {
+                    "project": project,
+                    "userCount": len(users),
+                    "users": [
+                        {
+                            "accountId": user.get("accountId"),
+                            "displayName": user.get("displayName"),
+                            "emailAddress": user.get("emailAddress"),
+                            "active": user.get("active")
+                        } for user in users
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_users: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def create_subtask(args: Dict[str, Any]) -> List[TextContent]:
+    """Create subtask under parent issue."""
+    parent_key = args.get("parent_key")
+    summary = args.get("summary")
+    description = args.get("description", "")
+    
+    if not parent_key or not summary:
+        return [TextContent(type="text", text="Error: Missing required parameters 'parent_key' and 'summary'")]
+    
+    if not validate_issue_key(parent_key):
+        return [TextContent(type="text", text="Error: Invalid parent issue key format")]
+    
+    logger.info(f"Creating subtask for parent: {sanitize_for_log(parent_key)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            # Get parent issue to determine project
+            parent_response = await client.get(
+                f"{JIRA_URL}/rest/api/3/issue/{parent_key}?fields=project",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if parent_response.status_code != 200:
+                return [TextContent(type="text", text=f"Error: Parent issue not found - {parent_response.status_code}")]
+            
+            parent_data = parent_response.json()
+            project_key = parent_data.get("fields", {}).get("project", {}).get("key")
+            
+            # Create subtask
+            subtask_data = {
+                "fields": {
+                    "project": {"key": project_key},
+                    "parent": {"key": parent_key},
+                    "summary": summary,
+                    "issuetype": {"name": "Sub-task"},
+                    "description": {
+                        "type": "doc",
+                        "version": 1,
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": description
+                                    }
+                                ]
+                            }
+                        ]
+                    } if description else None
+                }
+            }
+            
+            response = await client.post(
+                f"{JIRA_URL}/rest/api/3/issue",
+                json=subtask_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 201:
+                created_subtask = response.json()
+                subtask_key = created_subtask["key"]
+                
+                result = f"✅ Created subtask {subtask_key} under {parent_key}\n"
+                result += f"Summary: {summary}\n"
+                result += f"URL: {JIRA_URL}/browse/{subtask_key}"
+                
+                logger.info(f"Created JIRA subtask: {subtask_key}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in create_subtask: {e}", exc_info=VERBOSE_LOGGING)
             return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 async def get_projects(args: Dict[str, Any]) -> List[TextContent]:
