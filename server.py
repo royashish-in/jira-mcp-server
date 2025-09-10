@@ -436,6 +436,94 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["parent_key", "summary"]
             }
+        ),
+        Tool(
+            name="list_webhooks",
+            description="List configured webhooks",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="add_watcher",
+            description="Add watcher to issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Issue key"},
+                    "username": {"type": "string", "description": "Username to add as watcher"}
+                },
+                "required": ["key", "username"]
+            }
+        ),
+        Tool(
+            name="get_watchers",
+            description="Get watchers of issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Issue key"}
+                },
+                "required": ["key"]
+            }
+        ),
+        Tool(
+            name="get_issue_links",
+            description="Get all linked issues",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Issue key"}
+                },
+                "required": ["key"]
+            }
+        ),
+        Tool(
+            name="clone_issue",
+            description="Clone/duplicate issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Source issue key"},
+                    "summary": {"type": "string", "description": "New issue summary"}
+                },
+                "required": ["key", "summary"]
+            }
+        ),
+        Tool(
+            name="get_time_tracking_report",
+            description="Get time tracking report for project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project key"}
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="get_project_roles",
+            description="Get project roles and permissions",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project key"}
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="export_issues",
+            description="Export issues to specified format",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "jql": {"type": "string", "description": "JQL query"},
+                    "format": {"type": "string", "description": "Export format (json, csv)"}
+                },
+                "required": ["jql", "format"]
+            }
         )
     ]
 
@@ -508,6 +596,22 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return await get_users(arguments)
         elif name == "create_subtask":
             return await create_subtask(arguments)
+        elif name == "list_webhooks":
+            return await list_webhooks(arguments)
+        elif name == "add_watcher":
+            return await add_watcher(arguments)
+        elif name == "get_watchers":
+            return await get_watchers(arguments)
+        elif name == "get_issue_links":
+            return await get_issue_links(arguments)
+        elif name == "clone_issue":
+            return await clone_issue(arguments)
+        elif name == "get_time_tracking_report":
+            return await get_time_tracking_report(arguments)
+        elif name == "get_project_roles":
+            return await get_project_roles(arguments)
+        elif name == "export_issues":
+            return await export_issues(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:
@@ -2317,6 +2421,412 @@ async def create_subtask(args: Dict[str, Any]) -> List[TextContent]:
             return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
         except Exception as e:
             logger.error(f"Unexpected error in create_subtask: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def list_webhooks(args: Dict[str, Any]) -> List[TextContent]:
+    """List configured webhooks."""
+    logger.info("Listing webhooks")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/webhooks/1.0/webhook",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                webhooks = response.json()
+                
+                result = {
+                    "webhookCount": len(webhooks),
+                    "webhooks": [
+                        {
+                            "name": webhook.get("name"),
+                            "url": webhook.get("url"),
+                            "events": webhook.get("events"),
+                            "enabled": webhook.get("enabled")
+                        } for webhook in webhooks
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in list_webhooks: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def add_watcher(args: Dict[str, Any]) -> List[TextContent]:
+    """Add watcher to issue."""
+    key = args.get("key")
+    username = args.get("username")
+    
+    if not key or not username:
+        return [TextContent(type="text", text="Error: Missing required parameters 'key' and 'username'")]
+    
+    if not validate_issue_key(key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    logger.info(f"Adding watcher to issue: {sanitize_for_log(key)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                f"{JIRA_URL}/rest/api/3/issue/{key}/watchers",
+                data=f'"{username}"',
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN),
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 204:
+                result = f"✅ Added watcher to issue {key}\n"
+                result += f"Watcher: {username}\n"
+                result += f"URL: {JIRA_URL}/browse/{key}"
+                
+                logger.info(f"Added watcher to JIRA issue: {key}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in add_watcher: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_watchers(args: Dict[str, Any]) -> List[TextContent]:
+    """Get watchers of issue."""
+    key = args.get("key")
+    
+    if not key:
+        return [TextContent(type="text", text="Error: Missing required parameter 'key'")]
+    
+    if not validate_issue_key(key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    logger.info(f"Getting watchers for issue: {sanitize_for_log(key)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/issue/{key}/watchers",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                watchers = data.get("watchers", [])
+                
+                result = {
+                    "issue": key,
+                    "watcherCount": len(watchers),
+                    "watchers": [
+                        {
+                            "displayName": watcher.get("displayName"),
+                            "emailAddress": watcher.get("emailAddress"),
+                            "active": watcher.get("active")
+                        } for watcher in watchers
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_watchers: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_issue_links(args: Dict[str, Any]) -> List[TextContent]:
+    """Get all linked issues."""
+    key = args.get("key")
+    
+    if not key:
+        return [TextContent(type="text", text="Error: Missing required parameter 'key'")]
+    
+    if not validate_issue_key(key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    logger.info(f"Getting issue links for: {sanitize_for_log(key)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/issue/{key}?fields=issuelinks",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                issue_links = data.get("fields", {}).get("issuelinks", [])
+                
+                links = []
+                for link in issue_links:
+                    link_type = link.get("type", {}).get("name", "Unknown")
+                    if "outwardIssue" in link:
+                        target = link["outwardIssue"]
+                        direction = "outward"
+                    elif "inwardIssue" in link:
+                        target = link["inwardIssue"]
+                        direction = "inward"
+                    else:
+                        continue
+                    
+                    links.append({
+                        "linkType": link_type,
+                        "direction": direction,
+                        "linkedIssue": {
+                            "key": target.get("key"),
+                            "summary": target.get("fields", {}).get("summary"),
+                            "status": target.get("fields", {}).get("status", {}).get("name")
+                        }
+                    })
+                
+                result = {
+                    "issue": key,
+                    "linkCount": len(links),
+                    "links": links
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_issue_links: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def clone_issue(args: Dict[str, Any]) -> List[TextContent]:
+    """Clone/duplicate issue."""
+    key = args.get("key")
+    summary = args.get("summary")
+    
+    if not key or not summary:
+        return [TextContent(type="text", text="Error: Missing required parameters 'key' and 'summary'")]
+    
+    if not validate_issue_key(key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    logger.info(f"Cloning issue: {sanitize_for_log(key)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            # Get original issue
+            original_response = await client.get(
+                f"{JIRA_URL}/rest/api/3/issue/{key}",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if original_response.status_code != 200:
+                return [TextContent(type="text", text=f"Error: Original issue not found - {original_response.status_code}")]
+            
+            original = original_response.json()
+            original_fields = original.get("fields", {})
+            
+            # Create clone with modified summary
+            clone_data = {
+                "fields": {
+                    "project": original_fields.get("project"),
+                    "summary": summary,
+                    "description": original_fields.get("description"),
+                    "issuetype": original_fields.get("issuetype"),
+                    "priority": original_fields.get("priority")
+                }
+            }
+            
+            response = await client.post(
+                f"{JIRA_URL}/rest/api/3/issue",
+                json=clone_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 201:
+                cloned_issue = response.json()
+                clone_key = cloned_issue["key"]
+                
+                result = f"✅ Cloned issue {key} to {clone_key}\n"
+                result += f"Original: {original_fields.get('summary')}\n"
+                result += f"Clone: {summary}\n"
+                result += f"URL: {JIRA_URL}/browse/{clone_key}"
+                
+                logger.info(f"Cloned JIRA issue: {key} -> {clone_key}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in clone_issue: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_time_tracking_report(args: Dict[str, Any]) -> List[TextContent]:
+    """Get time tracking report for project."""
+    project = args.get("project")
+    
+    if not project:
+        return [TextContent(type="text", text="Error: Missing required parameter 'project'")]
+    
+    if not validate_project_key(project):
+        return [TextContent(type="text", text="Error: Invalid project key format")]
+    
+    logger.info(f"Getting time tracking report for project: {sanitize_for_log(project)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            # Get issues with worklog data
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/search?jql=project={project}&fields=key,summary,worklog,timetracking",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                issues = data.get("issues", [])
+                
+                total_logged = 0
+                issue_reports = []
+                
+                for issue in issues:
+                    fields = issue.get("fields", {})
+                    worklog = fields.get("worklog", {})
+                    time_tracking = fields.get("timetracking", {})
+                    
+                    logged_seconds = sum(w.get("timeSpentSeconds", 0) for w in worklog.get("worklogs", []))
+                    total_logged += logged_seconds
+                    
+                    issue_reports.append({
+                        "key": issue.get("key"),
+                        "summary": fields.get("summary"),
+                        "timeSpent": time_tracking.get("timeSpent"),
+                        "originalEstimate": time_tracking.get("originalEstimate"),
+                        "remainingEstimate": time_tracking.get("remainingEstimate"),
+                        "loggedHours": round(logged_seconds / 3600, 2) if logged_seconds else 0
+                    })
+                
+                result = {
+                    "project": project,
+                    "totalLoggedHours": round(total_logged / 3600, 2),
+                    "issueCount": len(issues),
+                    "issues": issue_reports
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_time_tracking_report: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_project_roles(args: Dict[str, Any]) -> List[TextContent]:
+    """Get project roles and permissions."""
+    project = args.get("project")
+    
+    if not project:
+        return [TextContent(type="text", text="Error: Missing required parameter 'project'")]
+    
+    if not validate_project_key(project):
+        return [TextContent(type="text", text="Error: Invalid project key format")]
+    
+    logger.info(f"Getting project roles for: {sanitize_for_log(project)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/project/{project}/role",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                roles = response.json()
+                
+                result = {
+                    "project": project,
+                    "roles": [
+                        {
+                            "name": role_name,
+                            "url": role_url
+                        } for role_name, role_url in roles.items()
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_project_roles: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def export_issues(args: Dict[str, Any]) -> List[TextContent]:
+    """Export issues to specified format."""
+    jql = args.get("jql")
+    format_type = args.get("format", "json").lower()
+    
+    if not jql:
+        return [TextContent(type="text", text="Error: Missing required parameter 'jql'")]
+    
+    logger.info(f"Exporting issues with JQL: {sanitize_for_log(jql)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/search?jql={jql}&maxResults=100",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                issues = data.get("issues", [])
+                
+                if format_type == "csv":
+                    # Simple CSV format
+                    csv_lines = ["Key,Summary,Status,Assignee,Priority"]
+                    for issue in issues:
+                        fields = issue.get("fields", {})
+                        assignee = fields.get("assignee", {}).get("displayName", "Unassigned") if fields.get("assignee") else "Unassigned"
+                        csv_lines.append(f"{issue.get('key')},\"{fields.get('summary', '')}\",{fields.get('status', {}).get('name', '')},{assignee},{fields.get('priority', {}).get('name', '')}")
+                    
+                    result = "\n".join(csv_lines)
+                else:
+                    # JSON format
+                    export_data = {
+                        "exportDate": "now",
+                        "jql": jql,
+                        "totalIssues": len(issues),
+                        "issues": [
+                            {
+                                "key": issue.get("key"),
+                                "summary": issue.get("fields", {}).get("summary"),
+                                "status": issue.get("fields", {}).get("status", {}).get("name"),
+                                "assignee": issue.get("fields", {}).get("assignee", {}).get("displayName") if issue.get("fields", {}).get("assignee") else "Unassigned",
+                                "priority": issue.get("fields", {}).get("priority", {}).get("name"),
+                                "created": issue.get("fields", {}).get("created")
+                            } for issue in issues
+                        ]
+                    }
+                    result = json.dumps(export_data, indent=2)
+                
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in export_issues: {e}", exc_info=VERBOSE_LOGGING)
             return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 async def get_projects(args: Dict[str, Any]) -> List[TextContent]:
