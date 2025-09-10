@@ -255,6 +255,107 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["keys", "updates"]
             }
+        ),
+        Tool(
+            name="upload_attachment",
+            description="Upload file attachment to JIRA issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "JIRA issue key (e.g., KW-41)"},
+                    "file_path": {"type": "string", "description": "Path to file to upload"}
+                },
+                "required": ["key", "file_path"]
+            }
+        ),
+        Tool(
+            name="download_attachment",
+            description="Download attachment from JIRA issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "attachment_url": {"type": "string", "description": "Attachment URL from list_attachments"},
+                    "save_path": {"type": "string", "description": "Path to save downloaded file"}
+                },
+                "required": ["attachment_url", "save_path"]
+            }
+        ),
+        Tool(
+            name="bulk_transition_issues",
+            description="Transition multiple issues at once",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "keys": {"type": "array", "items": {"type": "string"}, "description": "Array of issue keys"},
+                    "transition": {"type": "string", "description": "Transition name or ID"}
+                },
+                "required": ["keys", "transition"]
+            }
+        ),
+        Tool(
+            name="assign_issue",
+            description="Assign issue to user",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "JIRA issue key (e.g., KW-41)"},
+                    "assignee": {"type": "string", "description": "Username to assign (or null to unassign)"}
+                },
+                "required": ["key", "assignee"]
+            }
+        ),
+        Tool(
+            name="get_project_components",
+            description="Get project components",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "JIRA project key (e.g., KW)"}
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="get_project_versions",
+            description="Get project versions/releases",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "JIRA project key (e.g., KW)"}
+                },
+                "required": ["project"]
+            }
+        ),
+        Tool(
+            name="get_custom_fields",
+            description="Get available custom fields",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="get_sprints",
+            description="Get sprints for agile board",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "board_id": {"type": "string", "description": "Agile board ID"}
+                },
+                "required": ["board_id"]
+            }
+        ),
+        Tool(
+            name="add_to_sprint",
+            description="Add issues to sprint",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sprint_id": {"type": "string", "description": "Sprint ID"},
+                    "keys": {"type": "array", "items": {"type": "string"}, "description": "Array of issue keys"}
+                },
+                "required": ["sprint_id", "keys"]
+            }
         )
     ]
 
@@ -295,6 +396,24 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return await get_issue_types(arguments)
         elif name == "bulk_update_issues":
             return await bulk_update_issues(arguments)
+        elif name == "upload_attachment":
+            return await upload_attachment(arguments)
+        elif name == "download_attachment":
+            return await download_attachment(arguments)
+        elif name == "bulk_transition_issues":
+            return await bulk_transition_issues(arguments)
+        elif name == "assign_issue":
+            return await assign_issue(arguments)
+        elif name == "get_project_components":
+            return await get_project_components(arguments)
+        elif name == "get_project_versions":
+            return await get_project_versions(arguments)
+        elif name == "get_custom_fields":
+            return await get_custom_fields(arguments)
+        elif name == "get_sprints":
+            return await get_sprints(arguments)
+        elif name == "add_to_sprint":
+            return await add_to_sprint(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:
@@ -1338,6 +1457,422 @@ async def bulk_update_issues(args: Dict[str, Any]) -> List[TextContent]:
     
     result_text = f"Bulk update results ({len(keys)} issues):\n" + "\n".join(results)
     return [TextContent(type="text", text=result_text)]
+
+async def upload_attachment(args: Dict[str, Any]) -> List[TextContent]:
+    """Upload file attachment to JIRA issue."""
+    key = args.get("key")
+    file_path = args.get("file_path")
+    
+    if not key or not file_path:
+        return [TextContent(type="text", text="Error: Missing required parameters 'key' and 'file_path'")]
+    
+    if not validate_issue_key(key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    if not os.path.exists(file_path):
+        return [TextContent(type="text", text=f"Error: File not found: {file_path}")]
+    
+    logger.info(f"Uploading attachment to issue: {sanitize_for_log(key)}")
+    
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            with open(file_path, 'rb') as f:
+                files = {'file': (os.path.basename(file_path), f, 'application/octet-stream')}
+                
+                response = await client.post(
+                    f"{JIRA_URL}/rest/api/3/issue/{key}/attachments",
+                    files=files,
+                    auth=(JIRA_USERNAME, JIRA_API_TOKEN),
+                    headers={'X-Atlassian-Token': 'no-check'}
+                )
+            
+            if response.status_code == 200:
+                attachments = response.json()
+                if attachments:
+                    att = attachments[0]
+                    result = f"✅ Uploaded attachment to issue {key}\n"
+                    result += f"Filename: {att.get('filename')}\n"
+                    result += f"Size: {att.get('size')} bytes\n"
+                    result += f"ID: {att.get('id')}\n"
+                    result += f"URL: {JIRA_URL}/browse/{key}"
+                    
+                    logger.info(f"Uploaded attachment to JIRA issue: {key}")
+                    return [TextContent(type="text", text=result)]
+                else:
+                    return [TextContent(type="text", text="Upload completed but no attachment data returned")]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in upload_attachment: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def download_attachment(args: Dict[str, Any]) -> List[TextContent]:
+    """Download attachment from JIRA issue."""
+    attachment_url = args.get("attachment_url")
+    save_path = args.get("save_path")
+    
+    if not attachment_url or not save_path:
+        return [TextContent(type="text", text="Error: Missing required parameters 'attachment_url' and 'save_path'")]
+    
+    logger.info(f"Downloading attachment to: {sanitize_for_log(save_path)}")
+    
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.get(
+                attachment_url,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                with open(save_path, 'wb') as f:
+                    f.write(response.content)
+                
+                result = f"✅ Downloaded attachment\n"
+                result += f"Saved to: {save_path}\n"
+                result += f"Size: {len(response.content)} bytes"
+                
+                logger.info(f"Downloaded attachment to: {save_path}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in download_attachment: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def bulk_transition_issues(args: Dict[str, Any]) -> List[TextContent]:
+    """Transition multiple issues at once."""
+    keys = args.get("keys", [])
+    transition = args.get("transition")
+    
+    if not keys or not transition:
+        return [TextContent(type="text", text="Error: Missing required parameters 'keys' and 'transition'")]
+    
+    for key in keys:
+        if not validate_issue_key(key):
+            return [TextContent(type="text", text=f"Error: Invalid issue key format: {key}")]
+    
+    logger.info(f"Bulk transitioning {len(keys)} issues to {sanitize_for_log(transition)}")
+    
+    results = []
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for key in keys:
+            try:
+                # Get transitions for this issue
+                transitions_response = await client.get(
+                    f"{JIRA_URL}/rest/api/3/issue/{key}/transitions",
+                    auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+                )
+                
+                if transitions_response.status_code != 200:
+                    results.append(f"❌ {key}: Failed to get transitions")
+                    continue
+                
+                transitions_data = transitions_response.json()
+                available_transitions = transitions_data.get("transitions", [])
+                
+                # Find matching transition
+                transition_id = None
+                for t in available_transitions:
+                    if (t.get("name", "").lower() == transition.lower() or 
+                        t.get("id") == transition):
+                        transition_id = t.get("id")
+                        break
+                
+                if not transition_id:
+                    results.append(f"❌ {key}: Transition '{transition}' not available")
+                    continue
+                
+                # Perform transition
+                transition_data = {"transition": {"id": transition_id}}
+                response = await client.post(
+                    f"{JIRA_URL}/rest/api/3/issue/{key}/transitions",
+                    json=transition_data,
+                    auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+                )
+                
+                if response.status_code == 204:
+                    results.append(f"✅ {key}: Transitioned to {transition}")
+                else:
+                    results.append(f"❌ {key}: Failed - {response.status_code}")
+                    
+            except Exception as e:
+                results.append(f"❌ {key}: Error - {str(e)}")
+    
+    result_text = f"Bulk transition results ({len(keys)} issues):\n" + "\n".join(results)
+    return [TextContent(type="text", text=result_text)]
+
+async def assign_issue(args: Dict[str, Any]) -> List[TextContent]:
+    """Assign issue to user."""
+    key = args.get("key")
+    assignee = args.get("assignee")
+    
+    if not key:
+        return [TextContent(type="text", text="Error: Missing required parameter 'key'")]
+    
+    if not validate_issue_key(key):
+        return [TextContent(type="text", text="Error: Invalid issue key format")]
+    
+    logger.info(f"Assigning issue {sanitize_for_log(key)} to {sanitize_for_log(assignee)}")
+    
+    update_data = {
+        "fields": {
+            "assignee": {"name": assignee} if assignee and assignee.lower() != "null" else None
+        }
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.put(
+                f"{JIRA_URL}/rest/api/3/issue/{key}",
+                json=update_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 204:
+                assignee_text = assignee if assignee and assignee.lower() != "null" else "Unassigned"
+                result = f"✅ Assigned issue {key} to {assignee_text}\n"
+                result += f"URL: {JIRA_URL}/browse/{key}"
+                
+                logger.info(f"Assigned JIRA issue: {key}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in assign_issue: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_project_components(args: Dict[str, Any]) -> List[TextContent]:
+    """Get project components."""
+    project = args.get("project")
+    
+    if not project:
+        return [TextContent(type="text", text="Error: Missing required parameter 'project'")]
+    
+    if not validate_project_key(project):
+        return [TextContent(type="text", text="Error: Invalid project key format")]
+    
+    logger.info(f"Getting components for project: {sanitize_for_log(project)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/project/{project}/components",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                components = response.json()
+                
+                result = {
+                    "project": project,
+                    "components": [
+                        {
+                            "id": comp.get("id"),
+                            "name": comp.get("name"),
+                            "description": comp.get("description"),
+                            "lead": comp.get("lead", {}).get("displayName") if comp.get("lead") else None
+                        } for comp in components
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_project_components: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_project_versions(args: Dict[str, Any]) -> List[TextContent]:
+    """Get project versions/releases."""
+    project = args.get("project")
+    
+    if not project:
+        return [TextContent(type="text", text="Error: Missing required parameter 'project'")]
+    
+    if not validate_project_key(project):
+        return [TextContent(type="text", text="Error: Invalid project key format")]
+    
+    logger.info(f"Getting versions for project: {sanitize_for_log(project)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/project/{project}/versions",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                versions = response.json()
+                
+                result = {
+                    "project": project,
+                    "versions": [
+                        {
+                            "id": ver.get("id"),
+                            "name": ver.get("name"),
+                            "description": ver.get("description"),
+                            "released": ver.get("released"),
+                            "releaseDate": ver.get("releaseDate")
+                        } for ver in versions
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_project_versions: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_custom_fields(args: Dict[str, Any]) -> List[TextContent]:
+    """Get available custom fields."""
+    logger.info("Getting custom fields")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/field",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                fields = response.json()
+                custom_fields = [f for f in fields if f.get("custom", False)]
+                
+                result = {
+                    "totalCustomFields": len(custom_fields),
+                    "customFields": [
+                        {
+                            "id": field.get("id"),
+                            "name": field.get("name"),
+                            "description": field.get("description"),
+                            "fieldType": field.get("schema", {}).get("type")
+                        } for field in custom_fields
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_custom_fields: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_sprints(args: Dict[str, Any]) -> List[TextContent]:
+    """Get sprints for agile board."""
+    board_id = args.get("board_id")
+    
+    if not board_id:
+        return [TextContent(type="text", text="Error: Missing required parameter 'board_id'")]
+    
+    logger.info(f"Getting sprints for board: {sanitize_for_log(board_id)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/agile/1.0/board/{board_id}/sprint",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                sprints = data.get("values", [])
+                
+                result = {
+                    "boardId": board_id,
+                    "sprints": [
+                        {
+                            "id": sprint.get("id"),
+                            "name": sprint.get("name"),
+                            "state": sprint.get("state"),
+                            "startDate": sprint.get("startDate"),
+                            "endDate": sprint.get("endDate"),
+                            "goal": sprint.get("goal")
+                        } for sprint in sprints
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_sprints: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def add_to_sprint(args: Dict[str, Any]) -> List[TextContent]:
+    """Add issues to sprint."""
+    sprint_id = args.get("sprint_id")
+    keys = args.get("keys", [])
+    
+    if not sprint_id or not keys:
+        return [TextContent(type="text", text="Error: Missing required parameters 'sprint_id' and 'keys'")]
+    
+    for key in keys:
+        if not validate_issue_key(key):
+            return [TextContent(type="text", text=f"Error: Invalid issue key format: {key}")]
+    
+    logger.info(f"Adding {len(keys)} issues to sprint {sanitize_for_log(sprint_id)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            # Get issue IDs
+            issue_ids = []
+            for key in keys:
+                issue_response = await client.get(
+                    f"{JIRA_URL}/rest/api/3/issue/{key}?fields=id",
+                    auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+                )
+                if issue_response.status_code == 200:
+                    issue_data = issue_response.json()
+                    issue_ids.append(issue_data.get("id"))
+            
+            if not issue_ids:
+                return [TextContent(type="text", text="Error: No valid issues found")]
+            
+            # Add to sprint
+            sprint_data = {"issues": issue_ids}
+            response = await client.post(
+                f"{JIRA_URL}/rest/agile/1.0/sprint/{sprint_id}/issue",
+                json=sprint_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 204:
+                result = f"✅ Added {len(issue_ids)} issues to sprint {sprint_id}\n"
+                result += f"Issues: {', '.join(keys)}"
+                
+                logger.info(f"Added issues to sprint: {sprint_id}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in add_to_sprint: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 async def get_projects(args: Dict[str, Any]) -> List[TextContent]:
     """Get all accessible JIRA projects."""
