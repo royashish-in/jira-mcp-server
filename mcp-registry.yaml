@@ -1,0 +1,42 @@
+name: jira-mcp-server
+description: JIRA MCP Server for AI assistant integration
+version: 1.0.0
+author: Ashish Roy
+license: MIT
+repository: https://github.com/royashish/jira-mcp-server-standalone
+docker_image: royashish/jira-mcp-server:latest
+pypi_package: jira-mcp-server
+
+tags:
+  - jira
+  - atlassian
+  - project-management
+  - issue-tracking
+  - agile
+
+tools:
+  - name: get_user_stories
+    description: Fetch user stories from JIRA projects
+  - name: get_issue
+    description: Get specific JIRA issue by key
+  - name: get_projects
+    description: List available JIRA projects
+  - name: search_issues
+    description: Search JIRA issues with JQL
+  - name: get_project_stats
+    description: Get project statistics and metrics
+  - name: get_recent_issues
+    description: Get recently updated issues
+  - name: get_issues_by_assignee
+    description: Get issues assigned to specific user
+
+configuration:
+  required_env:
+    - JIRA_URL
+    - JIRA_USERNAME
+    - JIRA_API_TOKEN
+
+installation:
+  docker: "docker pull royashish/jira-mcp-server:latest"
+  pip: "pip install jira-mcp-server"
+  helm: "helm install jira-mcp ./helm-chart"

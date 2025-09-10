@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include .env.example
+include pyproject.toml
+recursive-include helm-chart *
+recursive-include mcp-clients *
+include claude-desktop-*.json
+include multi-instance-config.py

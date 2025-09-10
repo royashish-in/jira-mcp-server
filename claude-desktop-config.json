@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "jira": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-e", "JIRA_URL=https://your-company.atlassian.net",
+        "-e", "JIRA_USERNAME=your-email@company.com", 
+        "-e", "JIRA_API_TOKEN=your-api-token",
+        "royashish/jira-mcp-server:latest"
+      ]
+    }
+  }
+}

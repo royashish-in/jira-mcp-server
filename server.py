@@ -634,5 +634,25 @@ async def main():
         logger.error(f"Server failed to start: {e}", exc_info=True)
         sys.exit(1)
 
+def main():
+    """Main entry point for console script"""
+    asyncio.run(run_server())
+
+async def run_server():
+    """Run the MCP server"""
+    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="jira-mcp-server",
+                server_version="1.0.0",
+                capabilities=server.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
+                ),
+            ),
+        )
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
