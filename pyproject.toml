@@ -1,6 +1,6 @@
 [project]
 name = "jira-mcp-standalone"
-version = "1.0.0"
+version = "1.0.1"
 description = "JIRA MCP Server for AI integration - fetch user stories and issues"
 authors = [
     {name = "Your Name", email = "your.email@example.com"}

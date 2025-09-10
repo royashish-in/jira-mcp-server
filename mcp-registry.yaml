@@ -1,6 +1,6 @@
 name: jira-mcp-server
-description: JIRA MCP Server for AI assistant integration
-version: 1.0.0
+description: Complete JIRA MCP Server with 46 tools for comprehensive JIRA operations via AI assistants
+version: 1.0.1
 author: Ashish Roy
 license: MIT
 repository: https://github.com/royashish/jira-mcp-server-standalone
@@ -13,22 +13,33 @@ tags:
   - project-management
   - issue-tracking
   - agile
+  - workflow
+  - reporting
+  - enterprise
 
-tools:
-  - name: get_user_stories
-    description: Fetch user stories from JIRA projects
-  - name: get_issue
-    description: Get specific JIRA issue by key
-  - name: get_projects
-    description: List available JIRA projects
-  - name: search_issues
-    description: Search JIRA issues with JQL
-  - name: get_project_stats
-    description: Get project statistics and metrics
-  - name: get_recent_issues
-    description: Get recently updated issues
-  - name: get_issues_by_assignee
-    description: Get issues assigned to specific user
+features:
+  - "46 JIRA tools covering complete operations ecosystem"
+  - "Core operations: issues, projects, search, stats"
+  - "Workflow management: transitions, comments, assignments"
+  - "Agile support: boards, sprints, backlogs, burndown"
+  - "File management: attachments upload/download"
+  - "Advanced features: webhooks, reporting, batch operations"
+  - "Enterprise ready with comprehensive error handling"
+
+tools_summary:
+  total: 46
+  categories:
+    - "Core JIRA Operations (10 tools)"
+    - "Workflow Management (6 tools)"
+    - "File & Attachment Management (3 tools)"
+    - "Project & User Management (5 tools)"
+    - "Agile & Sprint Management (4 tools)"
+    - "Issue Relationships & Hierarchy (4 tools)"
+    - "Batch Operations (2 tools)"
+    - "Webhooks & Notifications (3 tools)"
+    - "Advanced Issue Operations (1 tool)"
+    - "Reporting & Analytics (3 tools)"
+    - "Advanced Admin & Edge Cases (5 tools)"
 
 configuration:
   required_env:
@@ -40,3 +51,17 @@ installation:
   docker: "docker pull royashish/jira-mcp-server:latest"
   pip: "pip install jira-mcp-server"
   helm: "helm install jira-mcp ./helm-chart"
+
+usage:
+  docker_run: |
+    docker run -d \
+      -e JIRA_URL=https://company.atlassian.net \
+      -e JIRA_USERNAME=user@company.com \
+      -e JIRA_API_TOKEN=your-token \
+      royashish/jira-mcp-server:latest
+  
+  mcp_clients:
+    claude_desktop: "See mcp-clients/claude-desktop-config.json"
+    vscode: "See mcp-clients/vscode-user-settings.json"
+    cline: "See mcp-clients/cline-config.json"
+    continue: "See mcp-clients/continue-config.json"

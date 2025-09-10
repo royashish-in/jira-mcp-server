@@ -524,6 +524,75 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["jql", "format"]
             }
+        ),
+        Tool(
+            name="create_webhook",
+            description="Create new webhook",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Webhook name"},
+                    "url": {"type": "string", "description": "Webhook URL"},
+                    "events": {"type": "array", "items": {"type": "string"}, "description": "Event types"}
+                },
+                "required": ["name", "url", "events"]
+            }
+        ),
+        Tool(
+            name="create_version",
+            description="Create project version/release",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project key"},
+                    "name": {"type": "string", "description": "Version name"},
+                    "description": {"type": "string", "description": "Version description"}
+                },
+                "required": ["project", "name"]
+            }
+        ),
+        Tool(
+            name="get_user_permissions",
+            description="Get user permissions for project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "description": "Project key"},
+                    "username": {"type": "string", "description": "Username"}
+                },
+                "required": ["project", "username"]
+            }
+        ),
+        Tool(
+            name="get_workflows",
+            description="Get available workflows",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="release_version",
+            description="Mark version as released",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "version_id": {"type": "string", "description": "Version ID"},
+                    "release_date": {"type": "string", "description": "Release date (YYYY-MM-DD)"}
+                },
+                "required": ["version_id"]
+            }
+        ),
+        Tool(
+            name="get_burndown_data",
+            description="Get sprint burndown data",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sprint_id": {"type": "string", "description": "Sprint ID"}
+                },
+                "required": ["sprint_id"]
+            }
         )
     ]
 
@@ -612,6 +681,18 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return await get_project_roles(arguments)
         elif name == "export_issues":
             return await export_issues(arguments)
+        elif name == "create_webhook":
+            return await create_webhook(arguments)
+        elif name == "create_version":
+            return await create_version(arguments)
+        elif name == "get_user_permissions":
+            return await get_user_permissions(arguments)
+        elif name == "get_workflows":
+            return await get_workflows(arguments)
+        elif name == "release_version":
+            return await release_version(arguments)
+        elif name == "get_burndown_data":
+            return await get_burndown_data(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:
@@ -2827,6 +2908,268 @@ async def export_issues(args: Dict[str, Any]) -> List[TextContent]:
             return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
         except Exception as e:
             logger.error(f"Unexpected error in export_issues: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def create_webhook(args: Dict[str, Any]) -> List[TextContent]:
+    """Create new webhook."""
+    name = args.get("name")
+    url = args.get("url")
+    events = args.get("events", [])
+    
+    if not name or not url or not events:
+        return [TextContent(type="text", text="Error: Missing required parameters")]
+    
+    logger.info(f"Creating webhook: {sanitize_for_log(name)}")
+    
+    webhook_data = {
+        "name": name,
+        "url": url,
+        "events": events,
+        "enabled": True
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                f"{JIRA_URL}/rest/webhooks/1.0/webhook",
+                json=webhook_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 201:
+                webhook = response.json()
+                result = f"✅ Created webhook: {name}\n"
+                result += f"URL: {url}\n"
+                result += f"Events: {', '.join(events)}\n"
+                result += f"ID: {webhook.get('self', 'Unknown')}"
+                
+                logger.info(f"Created webhook: {name}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in create_webhook: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def create_version(args: Dict[str, Any]) -> List[TextContent]:
+    """Create project version/release."""
+    project = args.get("project")
+    name = args.get("name")
+    description = args.get("description", "")
+    
+    if not project or not name:
+        return [TextContent(type="text", text="Error: Missing required parameters 'project' and 'name'")]
+    
+    if not validate_project_key(project):
+        return [TextContent(type="text", text="Error: Invalid project key format")]
+    
+    logger.info(f"Creating version {sanitize_for_log(name)} for project {sanitize_for_log(project)}")
+    
+    version_data = {
+        "name": name,
+        "description": description,
+        "project": project,
+        "released": False
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(
+                f"{JIRA_URL}/rest/api/3/version",
+                json=version_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 201:
+                version = response.json()
+                result = f"✅ Created version: {name}\n"
+                result += f"Project: {project}\n"
+                result += f"Description: {description}\n"
+                result += f"ID: {version.get('id')}"
+                
+                logger.info(f"Created version: {name}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in create_version: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_user_permissions(args: Dict[str, Any]) -> List[TextContent]:
+    """Get user permissions for project."""
+    project = args.get("project")
+    username = args.get("username")
+    
+    if not project or not username:
+        return [TextContent(type="text", text="Error: Missing required parameters")]
+    
+    if not validate_project_key(project):
+        return [TextContent(type="text", text="Error: Invalid project key format")]
+    
+    logger.info(f"Getting permissions for user {sanitize_for_log(username)} in project {sanitize_for_log(project)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/mypermissions?projectKey={project}",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                permissions = response.json()
+                
+                result = {
+                    "project": project,
+                    "username": username,
+                    "permissions": {
+                        key: perm.get("havePermission", False) 
+                        for key, perm in permissions.get("permissions", {}).items()
+                    }
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_user_permissions: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_workflows(args: Dict[str, Any]) -> List[TextContent]:
+    """Get available workflows."""
+    logger.info("Getting workflows")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/workflow/search",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                workflows = data.get("values", [])
+                
+                result = {
+                    "workflowCount": len(workflows),
+                    "workflows": [
+                        {
+                            "name": wf.get("name"),
+                            "description": wf.get("description"),
+                            "isActive": wf.get("isActive"),
+                            "isDraft": wf.get("isDraft")
+                        } for wf in workflows
+                    ]
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_workflows: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def release_version(args: Dict[str, Any]) -> List[TextContent]:
+    """Mark version as released."""
+    version_id = args.get("version_id")
+    release_date = args.get("release_date")
+    
+    if not version_id:
+        return [TextContent(type="text", text="Error: Missing required parameter 'version_id'")]
+    
+    logger.info(f"Releasing version: {sanitize_for_log(version_id)}")
+    
+    release_data = {
+        "released": True,
+        "releaseDate": release_date if release_date else None
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.put(
+                f"{JIRA_URL}/rest/api/3/version/{version_id}",
+                json=release_data,
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                version = response.json()
+                result = f"✅ Released version: {version.get('name')}\n"
+                result += f"Release date: {version.get('releaseDate', 'Not set')}\n"
+                result += f"Project: {version.get('project', {}).get('key', 'Unknown')}"
+                
+                logger.info(f"Released version: {version_id}")
+                return [TextContent(type="text", text=result)]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in release_version: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_burndown_data(args: Dict[str, Any]) -> List[TextContent]:
+    """Get sprint burndown data."""
+    sprint_id = args.get("sprint_id")
+    
+    if not sprint_id:
+        return [TextContent(type="text", text="Error: Missing required parameter 'sprint_id'")]
+    
+    logger.info(f"Getting burndown data for sprint: {sanitize_for_log(sprint_id)}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            # Get sprint issues with story points
+            response = await client.get(
+                f"{JIRA_URL}/rest/agile/1.0/sprint/{sprint_id}/issue?fields=summary,status,customfield_10016",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                issues = data.get("issues", [])
+                
+                total_points = 0
+                completed_points = 0
+                
+                for issue in issues:
+                    fields = issue.get("fields", {})
+                    story_points = fields.get("customfield_10016", 0) or 0
+                    status = fields.get("status", {}).get("name", "")
+                    
+                    total_points += story_points
+                    if status.lower() in ["done", "closed", "resolved"]:
+                        completed_points += story_points
+                
+                result = {
+                    "sprintId": sprint_id,
+                    "totalStoryPoints": total_points,
+                    "completedStoryPoints": completed_points,
+                    "remainingStoryPoints": total_points - completed_points,
+                    "completionPercentage": round((completed_points / total_points * 100) if total_points > 0 else 0, 2),
+                    "issueCount": len(issues)
+                }
+                
+                return [TextContent(type="text", text=json.dumps(result, indent=2))]
+            else:
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code} - {response.text}")]
+                
+        except httpx.RequestError as e:
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_burndown_data: {e}", exc_info=VERBOSE_LOGGING)
             return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 async def get_projects(args: Dict[str, Any]) -> List[TextContent]:

@@ -3,8 +3,11 @@
 ## PyPI Package ✅
 
 ```bash
-# Install from PyPI (when published)
+# Latest published: v1.0.1 (46 tools)
 pip install jira-mcp-server
+
+# Verify installation
+python -c "import jira_mcp_server; print('46 tools available')"
 
 # Run server
 jira-mcp-server
@@ -13,7 +16,7 @@ jira-mcp-server
 ## Docker Hub ✅
 
 ```bash
-# Pull and run
+# Pull and run (46 JIRA tools available)
 docker pull royashish/jira-mcp-server:latest
 docker run -d -e JIRA_URL=... -e JIRA_USERNAME=... -e JIRA_API_TOKEN=... royashish/jira-mcp-server:latest
 ```

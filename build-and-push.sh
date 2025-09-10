@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 IMAGE_NAME="jira-mcp-server"
-DOCKER_USERNAME="${DOCKER_USERNAME:-your-dockerhub-username}"
+DOCKER_USERNAME="${DOCKER_USERNAME:-royashish}"
 VERSION="${VERSION:-latest}"
 
 echo "🐳 Building and pushing JIRA MCP Server to Docker Hub"

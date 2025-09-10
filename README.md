@@ -19,8 +19,12 @@ docker run -d \
 
 ## 📋 Features
 
-- **Get User Stories**: Fetch user stories from JIRA projects
-- **Get Issues**: Retrieve specific JIRA issues by key
+- **46 JIRA Tools**: Complete JIRA operations ecosystem
+- **Core Operations**: User stories, issues, projects, search, stats
+- **Workflow Management**: Transitions, comments, assignments, worklogs
+- **Agile Support**: Boards, sprints, backlogs, burndown charts
+- **File Management**: Upload, download, list attachments
+- **Advanced Features**: Webhooks, reporting, batch operations
 - **MCP Protocol**: Standard Model Context Protocol for AI integration
 - **Docker Ready**: Pre-built Docker images available
 - **Secure**: Uses JIRA API tokens for authentication
@@ -136,17 +140,78 @@ The server communicates via stdio using the standard MCP protocol:
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | docker exec -i jira-mcp-server uv run python server.py
 ```
 
-## 📖 Available Tools
+## 📖 Available Tools (46 Total)
 
-### `get_user_stories`
+### Core JIRA Operations (10 tools)
+- `get_user_stories` - Fetch user stories from projects
+- `get_issue` - Get specific issue by key
+- `get_projects` - List all accessible projects
+- `search_issues` - Search issues with JQL
+- `get_project_stats` - Get project statistics
+- `get_recent_issues` - Get recently updated issues
+- `get_issues_by_assignee` - Get issues by assignee
+- `create_issue` - Create new issues
+- `update_issue` - Update existing issues
+- `advanced_jql_search` - Advanced JQL search
 
-Fetch user stories from JIRA projects.
+### Workflow Management (6 tools)
+- `transition_issue` - Change issue status
+- `bulk_transition_issues` - Bulk status changes
+- `get_transitions` - Get available transitions
+- `add_comment` - Add comments to issues
+- `assign_issue` - Assign issues to users
+- `add_worklog` - Log work time
 
-**Parameters:**
-- `project` (optional): JIRA project key (e.g., "KW")
-- `limit` (optional): Maximum number of stories (default: 10, max: 100)
+### File & Attachment Management (3 tools)
+- `upload_attachment` - Upload files to issues
+- `download_attachment` - Download attachments
+- `list_attachments` - List issue attachments
 
-**Example:**
+### Project & User Management (5 tools)
+- `get_issue_types` - Get project issue types
+- `get_project_components` - Get project components
+- `get_project_versions` - Get project versions
+- `get_custom_fields` - Get custom field definitions
+- `get_users` - Get project users
+
+### Agile & Sprint Management (4 tools)
+- `get_boards` - Get agile boards
+- `get_sprints` - Get board sprints
+- `get_sprint_issues` - Get sprint issues
+- `add_to_sprint` - Add issues to sprints
+
+### Issue Relationships & Hierarchy (4 tools)
+- `link_issues` - Create issue links
+- `get_issue_links` - Get issue relationships
+- `get_subtasks` - Get issue subtasks
+- `create_subtask` - Create subtasks
+
+### Batch Operations (2 tools)
+- `bulk_update_issues` - Bulk update multiple issues
+- `bulk_transition_issues` - Bulk transition multiple issues
+
+### Webhooks & Notifications (3 tools)
+- `list_webhooks` - List configured webhooks
+- `add_watcher` - Add issue watchers
+- `get_watchers` - Get issue watchers
+
+### Advanced Issue Operations (1 tool)
+- `clone_issue` - Clone existing issues
+
+### Reporting & Analytics (3 tools)
+- `get_time_tracking_report` - Get time tracking data
+- `get_project_roles` - Get project role assignments
+- `export_issues` - Export issues in various formats
+
+### Advanced Admin & Edge Cases (5 tools)
+- `create_webhook` - Create new webhooks
+- `create_version` - Create project versions
+- `get_user_permissions` - Get user permissions
+- `get_workflows` - Get workflow definitions
+- `release_version` - Release project versions
+- `get_burndown_data` - Get sprint burndown data
+
+**Example Usage:**
 ```json
 {
   "name": "get_user_stories",
@@ -157,37 +222,23 @@ Fetch user stories from JIRA projects.
 }
 ```
 
-### `get_issue`
-
-Get a specific JIRA issue by key.
-
-**Parameters:**
-- `key` (required): JIRA issue key (e.g., "KW-123")
-
-**Example:**
-```json
-{
-  "name": "get_issue",
-  "arguments": {
-    "key": "KW-123"
-  }
-}
-```
-
 ## 🧪 Testing
 
 ```bash
-# Run all tests
-./run_tests.sh
+# Run all tests (recommended)
+python run_tests.py
 
-# Unit tests only
-uv run python -m pytest test_unit.py -v
+# Quick validation (30 seconds)
+python run_tests.py --smoke
 
-# Integration test (requires JIRA access)
-uv run python test_integration.py
+# Core functionality (2 minutes)
+python run_tests.py --unit
 
-# Test MCP protocol
-uv run python test_mcp_client.py
+# All 46 tools (5 minutes)
+python run_tests.py --comprehensive
+
+# Test JIRA connection
+python test_connection.py
 ```
 
 ## 🔒 Security
