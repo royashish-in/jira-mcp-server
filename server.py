@@ -87,6 +87,26 @@ async def list_tools() -> List[Tool]:
                 },
                 "required": ["key"]
             }
+        ),
+        Tool(
+            name="get_projects",
+            description="Get all accessible JIRA projects",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="search_issues",
+            description="Search JIRA issues using JQL (JIRA Query Language)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "jql": {"type": "string", "description": "JQL query string"},
+                    "limit": {"type": "integer", "description": "Max results", "minimum": 1, "maximum": 100}
+                },
+                "required": ["jql"]
+            }
         )
     ]
 
@@ -99,6 +119,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return await get_user_stories(arguments)
         elif name == "get_issue":
             return await get_issue(arguments)
+        elif name == "get_projects":
+            return await get_projects(arguments)
+        elif name == "search_issues":
+            return await search_issues(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
     except Exception as e:
@@ -254,6 +278,131 @@ async def get_issue(args: Dict[str, Any]) -> List[TextContent]:
             return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
         except Exception as e:
             logger.error(f"Unexpected error in get_issue: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def search_issues(args: Dict[str, Any]) -> List[TextContent]:
+    """Search JIRA issues using JQL."""
+    jql = args.get("jql")
+    limit = min(args.get("limit", 50), 100)
+    
+    if not jql:
+        logger.error("Missing required 'jql' parameter")
+        return [TextContent(type="text", text="Error: Missing required 'jql' parameter")]
+    
+    logger.info(f"Searching issues with JQL: {sanitize_for_log(jql)}, limit: {limit}")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/search",
+                params={"jql": jql, "maxResults": limit},
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            logger.info(f"JIRA API response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON response from JIRA API: {e}")
+                    return [TextContent(type="text", text="Error: Invalid response from JIRA API")]
+                
+                issues_data = data.get("issues", [])
+                logger.info(f"Found {len(issues_data)} issues")
+                
+                issues = []
+                for issue in issues_data:
+                    try:
+                        issue_info = {
+                            "key": issue.get("key", "Unknown"),
+                            "summary": issue.get("fields", {}).get("summary", "No summary"),
+                            "status": issue.get("fields", {}).get("status", {}).get("name", "Unknown"),
+                            "issueType": issue.get("fields", {}).get("issuetype", {}).get("name", "Unknown"),
+                            "priority": issue.get("fields", {}).get("priority", {}).get("name", "Unknown") if issue.get("fields", {}).get("priority") else "None",
+                            "assignee": issue.get("fields", {}).get("assignee", {}).get("displayName", "Unassigned") if issue.get("fields", {}).get("assignee") else "Unassigned"
+                        }
+                        issues.append(issue_info)
+                    except Exception as e:
+                        logger.error(f"Error processing issue {sanitize_for_log(issue.get('key', 'unknown'))}: {e}")
+                        continue
+                
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({"issues": issues}, indent=2)
+                )]
+            elif response.status_code == 400:
+                logger.error(f"Invalid JQL query: {sanitize_for_log(jql)}")
+                return [TextContent(type="text", text="Error: Invalid JQL query syntax. Check your query and try again.")]
+            elif response.status_code == 401:
+                logger.error("JIRA authentication failed (401)")
+                return [TextContent(type="text", text="Error: Authentication failed (401). Generate new API token at https://id.atlassian.com/manage-profile/security/api-tokens")]
+            elif response.status_code == 403:
+                logger.error("JIRA access denied (403)")
+                return [TextContent(type="text", text="Error: Access denied (403). Check JIRA project permissions and API access.")]
+            else:
+                logger.error(f"JIRA API error: {response.status_code}")
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code}. Check JIRA URL and network connectivity.")]
+        except httpx.RequestError as e:
+            logger.error(f"HTTP request failed: {e}")
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in search_issues: {e}", exc_info=VERBOSE_LOGGING)
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def get_projects(args: Dict[str, Any]) -> List[TextContent]:
+    """Get all accessible JIRA projects."""
+    logger.info("Getting JIRA projects")
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{JIRA_URL}/rest/api/3/project",
+                auth=(JIRA_USERNAME, JIRA_API_TOKEN)
+            )
+            
+            logger.info(f"JIRA API response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                try:
+                    projects_data = response.json()
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON response from JIRA API: {e}")
+                    return [TextContent(type="text", text="Error: Invalid response from JIRA API")]
+                
+                projects = []
+                for project in projects_data:
+                    try:
+                        project_info = {
+                            "key": project.get("key", "Unknown"),
+                            "name": project.get("name", "No name"),
+                            "projectTypeKey": project.get("projectTypeKey", "Unknown"),
+                            "lead": project.get("lead", {}).get("displayName", "Unknown") if project.get("lead") else "Unknown"
+                        }
+                        projects.append(project_info)
+                    except Exception as e:
+                        logger.error(f"Error processing project {sanitize_for_log(project.get('key', 'unknown'))}: {e}")
+                        continue
+                
+                logger.info(f"Retrieved {len(projects)} projects")
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({"projects": projects}, indent=2)
+                )]
+            elif response.status_code == 401:
+                logger.error("JIRA authentication failed (401)")
+                return [TextContent(type="text", text="Error: Authentication failed (401). Generate new API token at https://id.atlassian.com/manage-profile/security/api-tokens")]
+            elif response.status_code == 403:
+                logger.error("JIRA access denied (403)")
+                return [TextContent(type="text", text="Error: Access denied (403). Check JIRA project permissions and API access.")]
+            else:
+                logger.error(f"JIRA API error: {response.status_code}")
+                return [TextContent(type="text", text=f"Error: HTTP {response.status_code}. Check JIRA URL and network connectivity.")]
+        except httpx.RequestError as e:
+            logger.error(f"HTTP request failed: {e}")
+            return [TextContent(type="text", text=f"Error: Connection failed - {str(e)}")]
+        except Exception as e:
+            logger.error(f"Unexpected error in get_projects: {e}", exc_info=VERBOSE_LOGGING)
             return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 async def main():
