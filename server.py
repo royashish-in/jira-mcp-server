@@ -37,6 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("jira-mcp-server")
 
+# Check for missing configuration but don't crash
 missing_vars = []
 if not JIRA_URL:
     missing_vars.append("JIRA_URL")
@@ -45,8 +46,9 @@ if not JIRA_USERNAME:
 if not JIRA_API_TOKEN:
     missing_vars.append("JIRA_API_TOKEN")
 
+CONFIG_ERROR = None
 if missing_vars:
-    raise ValueError(f"Missing required JIRA configuration: {', '.join(missing_vars)}")
+    CONFIG_ERROR = f"Missing JIRA configuration: {', '.join(missing_vars)}. Set environment variables: JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN"
 
 server = Server("jira-mcp-server")
 
@@ -600,6 +602,11 @@ async def list_tools() -> List[Tool]:
 async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
     """Handle tool calls."""
     logger.info(f"Tool called: {sanitize_for_log(name)}")
+    
+    # Check configuration before processing any tool
+    if CONFIG_ERROR:
+        return [TextContent(type="text", text=f"Configuration Error: {CONFIG_ERROR}")]
+    
     try:
         if name == "get_user_stories":
             return await get_user_stories(arguments)
