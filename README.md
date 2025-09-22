@@ -1,31 +1,30 @@
 # JIRA MCP Server
 
-A Model Context Protocol (MCP) server for JIRA integration that allows AI assistants to read user stories and issues from JIRA projects.
+A Model Context Protocol (MCP) server for JIRA integration built with **FastMCP 2.0** that allows AI assistants to read user stories and issues from JIRA projects.
 
 ## 🚀 Quick Start with Docker
 
 ```bash
 # Pull from Docker Hub
-docker pull yourusername/jira-mcp-server:latest
+docker pull royashish/jira-mcp-server:latest
 
-# Run with environment variables
-docker run -d \
-  -e JIRA_URL=https://your-company.atlassian.net \
-  -e JIRA_USERNAME=your-email@company.com \
-  -e JIRA_API_TOKEN=your-api-token \
-  --name jira-mcp-server \
-  yourusername/jira-mcp-server:latest
+# Test MCP protocol
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true},"sampling":{}},"clientInfo":{"name":"test","version":"1.0.0"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_user_stories","arguments":{"project":"KW","limit":3}}}' | docker run -i --env-file .env royashish/jira-mcp-server:latest
 ```
 
 ## 📋 Features
 
-- **46 JIRA Tools**: Complete JIRA operations ecosystem
+- **47 JIRA Tools**: Complete JIRA operations ecosystem (including global statistics)
+- **FastMCP 2.0**: Modern, efficient implementation with 90% less code
 - **Core Operations**: User stories, issues, projects, search, stats
 - **Workflow Management**: Transitions, comments, assignments, worklogs
 - **Agile Support**: Boards, sprints, backlogs, burndown charts
 - **File Management**: Upload, download, list attachments
 - **Advanced Features**: Webhooks, reporting, batch operations
 - **MCP Protocol**: Standard Model Context Protocol for AI integration
+- **Auto Schema Generation**: FastMCP handles validation and type safety
 - **Docker Ready**: Pre-built Docker images available
 - **Secure**: Uses JIRA API tokens for authentication
 
@@ -50,21 +49,16 @@ docker run -d \
 ### Using Docker Hub Image
 
 ```bash
-# Basic usage
-docker run -d \
-  -e JIRA_URL=https://your-company.atlassian.net \
-  -e JIRA_USERNAME=your-email@company.com \
-  -e JIRA_API_TOKEN=your-api-token \
-  yourusername/jira-mcp-server:latest
+# Interactive MCP mode (recommended)
+docker run -i --env-file .env royashish/jira-mcp-server:latest
 
-# With custom name and restart policy
+# Background daemon mode
 docker run -d \
-  --name jira-mcp \
-  --restart unless-stopped \
   -e JIRA_URL=https://your-company.atlassian.net \
   -e JIRA_USERNAME=your-email@company.com \
   -e JIRA_API_TOKEN=your-api-token \
-  yourusername/jira-mcp-server:latest
+  --name jira-mcp \
+  royashish/jira-mcp-server:latest
 ```
 
 ### Using Docker Compose
@@ -73,12 +67,22 @@ docker run -d \
 version: '3.8'
 services:
   jira-mcp-server:
-    image: yourusername/jira-mcp-server:latest
+    image: royashish/jira-mcp-server:latest
     environment:
       - JIRA_URL=https://your-company.atlassian.net
       - JIRA_USERNAME=your-email@company.com
       - JIRA_API_TOKEN=your-api-token
     restart: unless-stopped
+```
+
+### Using Kubernetes (Helm)
+
+```bash
+# Install with Helm
+helm install jira-mcp ./helm-chart \
+  --set jira.url=https://your-company.atlassian.net \
+  --set jira.username=your-email@company.com \
+  --set jira.apiToken=your-api-token
 ```
 
 ## 🛠️ Local Development
@@ -107,7 +111,7 @@ nano .env
 # Test connection
 uv run python test_connection.py
 
-# Run server
+# Run server (FastMCP 2.0)
 uv run python server.py
 ```
 
@@ -115,7 +119,7 @@ uv run python server.py
 
 ### With Claude Desktop
 
-Add to your Claude Desktop MCP configuration:
+Add to `~/.config/Claude Desktop/claude_desktop_config.json`:
 
 ```json
 {
@@ -123,8 +127,9 @@ Add to your Claude Desktop MCP configuration:
     "jira": {
       "command": "docker",
       "args": [
-        "exec", "-i", "jira-mcp-server",
-        "uv", "run", "python", "server.py"
+        "run", "-i", "--rm",
+        "--env-file", "/path/to/.env",
+        "royashish/jira-mcp-server:latest"
       ]
     }
   }
@@ -133,14 +138,38 @@ Add to your Claude Desktop MCP configuration:
 
 ### With Other MCP Clients
 
-The server communicates via stdio using the standard MCP protocol:
+**Cline (VSCode)** - Add to settings:
+```json
+{
+  "cline.mcpServers": {
+    "jira": {
+      "command": "docker",
+      "args": ["run", "-i", "--env-file", ".env", "royashish/jira-mcp-server:latest"]
+    }
+  }
+}
+```
+
+**Continue** - Add to config:
+```json
+{
+  "mcpServers": {
+    "jira": {
+      "command": "docker",
+      "args": ["run", "-i", "--env-file", ".env", "royashish/jira-mcp-server:latest"]
+    }
+  }
+}
+```
+
+### Manual Testing
 
 ```bash
 # Send MCP requests via stdin
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | docker exec -i jira-mcp-server uv run python server.py
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | docker run -i --env-file .env royashish/jira-mcp-server:latest
 ```
 
-## 📖 Available Tools (46 Total)
+## 📖 Available Tools (47 Total)
 
 ### Core JIRA Operations (10 tools)
 - `get_user_stories` - Fetch user stories from projects
@@ -203,13 +232,14 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | docker exec -i jira-mcp-
 - `get_project_roles` - Get project role assignments
 - `export_issues` - Export issues in various formats
 
-### Advanced Admin & Edge Cases (5 tools)
+### Advanced Admin & Edge Cases (6 tools)
 - `create_webhook` - Create new webhooks
 - `create_version` - Create project versions
 - `get_user_permissions` - Get user permissions
 - `get_workflows` - Get workflow definitions
 - `release_version` - Release project versions
 - `get_burndown_data` - Get sprint burndown data
+- `get_jira_statistics` - Get comprehensive JIRA instance statistics
 
 **Example Usage:**
 ```json
@@ -225,21 +255,14 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | docker exec -i jira-mcp-
 ## 🧪 Testing
 
 ```bash
-# Run all tests (recommended)
-python run_tests.py
+# Run comprehensive test suite (all 47 tools)
+python test/test_suite.py
 
-# Quick validation (30 seconds)
-python run_tests.py --smoke
-
-# Core functionality (2 minutes)
-python run_tests.py --unit
-
-# All 46 tools (5 minutes)
-python run_tests.py --comprehensive
-
-# Test JIRA connection
-python test_connection.py
+# Test locally (without Docker)
+python test/test_suite.py --local
 ```
+
+See [test/TEST_GUIDE.md](test/TEST_GUIDE.md) for detailed testing instructions.
 
 ## 🔒 Security
 
@@ -247,6 +270,31 @@ python test_connection.py
 - Validates input parameters
 - Rate limiting and timeout protection
 - No data persistence or logging of sensitive information
+
+## 🧪 Testing
+
+Comprehensive test suite validates all 47 tools:
+
+```bash
+# Test all tools with Docker
+python test/test_suite.py
+
+# Test locally
+python test/test_suite.py --local
+```
+
+See [test/TEST_GUIDE.md](test/TEST_GUIDE.md) for details.
+
+## 🔧 Technical Details
+
+- **HTTP Client**: Uses synchronous `requests` library (resolves MCP TaskGroup conflicts with async httpx)
+- **MCP Protocol**: JSON-RPC 2.0 over stdin/stdout
+- **Dependencies**: `fastmcp>=2.0.0`, `requests>=2.25.0`, `python-dotenv>=1.0.0`
+- **Python**: 3.10+ required
+
+### MCP TaskGroup Fix
+
+This server uses the synchronous `requests` library instead of `httpx.AsyncClient` to avoid TaskGroup management conflicts with MCP server frameworks. The async `httpx` client can cause 424 status codes and task cleanup issues when used within MCP's event loop management.
 
 ## 📝 License
 

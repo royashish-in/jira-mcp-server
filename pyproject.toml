@@ -1,9 +1,9 @@
 [project]
 name = "jira-mcp-standalone"
-version = "1.0.2"
-description = "JIRA MCP Server for AI integration - fetch user stories and issues"
+version = "2.0.0"
+description = "JIRA MCP Server - FastMCP 2.0 implementation with 47 tools for AI integration"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Roy Ashish", email = "royashish@gmail.com"}
 ]
 readme = "README.md"
 license = {text = "MIT"}
@@ -22,8 +22,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "mcp>=1.0.0",
-    "httpx>=0.25.0",
+    "fastmcp>=2.0.0",
+    "requests>=2.25.0",
     "python-dotenv>=1.0.0"
 ]
 
@@ -47,7 +47,7 @@ Issues = "https://github.com/yourusername/jira-mcp-server/issues"
 Documentation = "https://github.com/yourusername/jira-mcp-server#readme"
 
 [project.scripts]
-jira-mcp-server = "server:main"
+jira-mcp-server = "server:mcp.run"
 
 [build-system]
 requires = ["hatchling"]

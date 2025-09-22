@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Change to project root directory
+cd "$(dirname "$0")/.."
+
 # Configuration
 IMAGE_NAME="jira-mcp-server"
 DOCKER_USERNAME="${DOCKER_USERNAME:-royashish}"
@@ -24,17 +27,14 @@ if [ "$VERSION" != "latest" ]; then
     fi
 fi
 
-# Test the image
+# Test the image with MCP protocol
 echo "🧪 Testing Docker image..."
-TEST_URL="${TEST_JIRA_URL:-https://placeholder.atlassian.net}"
-TEST_USER="${TEST_JIRA_USERNAME:-placeholder@example.com}"
-TEST_TOKEN="${TEST_JIRA_API_TOKEN:-placeholder-token}"
-docker run --rm \
-    -e JIRA_URL="$TEST_URL" \
-    -e JIRA_USERNAME="$TEST_USER" \
-    -e JIRA_API_TOKEN="$TEST_TOKEN" \
-    "${DOCKER_USERNAME}/${IMAGE_NAME}:${VERSION}" \
-    python test_connection.py || echo "⚠️  Test failed (expected without real credentials)"
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | \
+docker run --rm -i \
+    -e JIRA_URL="${TEST_JIRA_URL:-https://placeholder.atlassian.net}" \
+    -e JIRA_USERNAME="${TEST_JIRA_USERNAME:-placeholder@example.com}" \
+    -e JIRA_API_TOKEN="${TEST_JIRA_API_TOKEN:-placeholder-token}" \
+    "${DOCKER_USERNAME}/${IMAGE_NAME}:${VERSION}" || echo "⚠️  Test failed (expected without real credentials)"
 
 # Check Docker login status
 if ! docker info >/dev/null 2>&1; then
